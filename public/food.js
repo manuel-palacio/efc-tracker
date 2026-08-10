@@ -89,12 +89,21 @@
     safeHTML(host, html);
   }
 
+  function chartColors() {
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      grid: styles.getPropertyValue('--chart-grid').trim() || 'rgba(66,71,82,.35)',
+      text: styles.getPropertyValue('--chart-txt').trim() || '#8c919d'
+    };
+  }
+
   function renderWheatChart() {
     const canvas = document.getElementById('wheat-chart');
     if (!canvas) return;
     if (canvas._chart) canvas._chart.destroy();
     const data = FoodState.wheatPrices;
     if (!data.length) return;
+    const colors = chartColors();
     canvas._chart = new Chart(canvas, {
       type: 'line',
       data: {
@@ -107,7 +116,14 @@
           tension: 0, stepped: true, pointRadius: 2, fill: true
         }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: colors.grid }, ticks: { color: colors.text } },
+          y: { grid: { color: colors.grid }, ticks: { color: colors.text } }
+        }
+      }
     });
   }
 
@@ -272,6 +288,7 @@
       { id: 'events',   label: 'Events',   icon: 'campaign',  render: renderEvents }
     ],
     filters: { html: filtersHTML, init: initFiltersDOM },
-    init: init
+    init: init,
+    onThemeChange: function () { rerender(); }
   });
 })();

@@ -98,8 +98,6 @@
     sort:    { col: 'updated_at', dir: 'desc' },
     selectedEventId: null,
     _lastFocusedRow: null,
-    theme: 'dark',
-    currentView: 'overview',
     // Auto-activate Jun-Aug
     summerMode: new Date().getMonth() >= 5 && new Date().getMonth() <= 7,
     bannerDismissed: false,

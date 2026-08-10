@@ -145,8 +145,10 @@ window.EFC = (function () {
     let html = '';
     Object.keys(_modes).forEach(function (id) {
       const m = _modes[id];
-      const cls = (id === _currentModeId) ? 'mode-tab active' : 'mode-tab';
-      html += '<button class="' + cls + '" data-mode="' + escapeHTML(id) + '" type="button">'
+      const active = id === _currentModeId;
+      html += '<button class="' + (active ? 'mode-tab active' : 'mode-tab') + '"'
+        + ' data-mode="' + escapeHTML(id) + '" type="button"'
+        + ' role="tab" aria-selected="' + (active ? 'true' : 'false') + '">'
         + '<span class="material-symbols-outlined">' + escapeHTML(m.icon) + '</span>'
         + escapeHTML(m.label)
         + '</button>';

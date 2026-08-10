@@ -115,6 +115,7 @@ fetch_gas_prices() {
 fetch_disruption_news() {
   echo "Fetching aviation fuel disruption news from Google News RSS..."
   local tmp=$(mktemp)
+  local out=$(mktemp)
   local query="jet+fuel+shortage+OR+kerosene+supply+disruption+OR+airline+fuel+crisis+OR+aviation+fuel+supply"
   local ua="Mozilla/5.0 (compatible; EFCTracker/1.0; +https://efc-tracker.fly.dev)"
 
@@ -231,18 +232,18 @@ fetch_disruption_news() {
       updated_at:        ($fields[2] // ""),
       _source_type:      "google_news_rss"
     }] | if length > 0 then . else empty end
-  ' > /tmp/news_disruptions.json 2>/dev/null
+  ' > "$out" 2>/dev/null
 
-  local count=$(jq 'length' /tmp/news_disruptions.json 2>/dev/null || echo 0)
+  local count=$(jq 'length' "$out" 2>/dev/null || echo 0)
 
   if [ "$count" -gt 0 ] 2>/dev/null; then
-    cp /tmp/news_disruptions.json "$DATA_DIR/energy/disruptions.json"
+    cp "$out" "$DATA_DIR/energy/disruptions.json"
     echo "disruptions.json written: ${count} news items (live)"
   else
     echo "No news items parsed — keeping existing disruptions.json"
   fi
 
-  rm -f "$tmp" /tmp/news_disruptions.json
+  rm -f "$tmp" "$out"
 }
 
 # ── Wheat price fetch (FRED PWHEAMTUSDM, monthly $/MT) ──────────────────────
@@ -279,6 +280,7 @@ fetch_wheat_prices() {
 fetch_food_events() {
   echo "Fetching food crisis news from Google News RSS..."
   local tmp=$(mktemp)
+  local out=$(mktemp)
   local query="wheat+OR+grain+OR+fertilizer+OR+%22food+crisis%22+OR+%22export+ban%22+OR+harvest+OR+famine"
   local ua="Mozilla/5.0 (compatible; EFCTracker/1.0; +https://efc-tracker.fly.dev)"
 
@@ -358,18 +360,18 @@ fetch_food_events() {
       source_url:   ($f[1] // "#"),
       updated_at:   ($f[2] // "")
     }] | if length > 0 then . else empty end
-  ' > /tmp/food_events.json 2>/dev/null
+  ' > "$out" 2>/dev/null
 
-  local count=$(jq 'length' /tmp/food_events.json 2>/dev/null || echo 0)
+  local count=$(jq 'length' "$out" 2>/dev/null || echo 0)
 
   if [ "$count" -gt 0 ] 2>/dev/null; then
-    cp /tmp/food_events.json "$DATA_DIR/food/food-events.json"
+    cp "$out" "$DATA_DIR/food/food-events.json"
     echo "food-events.json written: ${count} news items (live)"
   else
     echo "No food news items parsed — keeping existing food-events.json"
   fi
 
-  rm -f "$tmp" /tmp/food_events.json
+  rm -f "$tmp" "$out"
 }
 
 # ── Initial fetch ────────────────────────────────────────────────────────────

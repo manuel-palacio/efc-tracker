@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "live-server public --port=5500 --no-browser"
+    "dev": "live-server public --port=5500 --no-browser",
+    "test": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "live-server": "^1.2.2"
   }
 }
