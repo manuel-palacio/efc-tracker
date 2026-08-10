@@ -238,7 +238,10 @@
     const clear = document.querySelector('#food-filter-clear');
     if (clear) clear.addEventListener('click', function () {
       Object.keys(FoodState.filters).forEach(function (k) { FoodState.filters[k] = ''; });
-      initFiltersDOM();
+      map.forEach(function (pair) {
+        const el = document.querySelector(pair[0]);
+        if (el) el.value = '';
+      });
       rerender();
     });
   }

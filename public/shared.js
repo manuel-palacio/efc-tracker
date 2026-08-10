@@ -299,10 +299,20 @@ window.EFC = (function () {
 
   /* ---- Bootstrap ---- */
 
+  function _updateHeaderTimestamp() {
+    const now = new Date();
+    const s = $('#header-ts-short');
+    const f = $('#header-ts-full');
+    if (s) s.textContent = 'Updated ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (f) f.textContent = now.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
+  }
+
   function start() {
     initTheme();
     initSidebar();
     initInfoPopover();
+    _updateHeaderTimestamp();
+    setInterval(_updateHeaderTimestamp, 60000);
     window.addEventListener('hashchange', _onHashChange);
 
     // Initial mode priority: URL hash > localStorage > first registered mode.

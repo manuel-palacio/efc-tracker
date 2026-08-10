@@ -61,8 +61,16 @@
       timeline:          Array.isArray(r.timeline) ? r.timeline : [],
       source_name:       String(r.source_name  || ''),
       source_url:        String(r.source_url   || '#'),
-      updated_at:        String(r.updated_at   || new Date().toISOString()),
+      updated_at:        normalizeTimestamp(r.updated_at),
     }));
+  }
+
+  // Live RSS data carries RFC-1123 pubDates ("Sun, 10 Aug 2026 07:00:00 GMT").
+  // Downstream code string-sorts updated_at and slices YYYY-MM-DD from it,
+  // both of which require ISO 8601.
+  function normalizeTimestamp(value) {
+    const parsed = Date.parse(value);
+    return isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString();
   }
 
   async function fetchAirports() {
@@ -92,7 +100,8 @@
     _lastFocusedRow: null,
     theme: 'dark',
     currentView: 'overview',
-    summerMode: false,
+    // Auto-activate Jun-Aug
+    summerMode: new Date().getMonth() >= 5 && new Date().getMonth() <= 7,
     bannerDismissed: false,
   };
 
@@ -272,14 +281,17 @@
         <td class="${isOverview ? 'col-impact' : ''}"><span class="impact-badge impact-${escapeHTML(d.impact_type)}">${impactLabel(d.impact_type)}</span></td>
         <td><span class="badge ${escapeHTML(d.severity)}"><span class="badge-dot" aria-hidden="true"></span>${escapeHTML(d.severity)}</span></td>
         <td class="ts-cell ${isOverview ? 'col-updated' : ''}">${fmtDate(d.updated_at)}</td>
-        <td class="${isOverview ? 'col-source' : ''}"><a href="${escapeHTML(d.source_url)}" target="_blank" rel="noopener noreferrer" class="source-link" onclick="event.stopPropagation()" aria-label="Source: ${escapeHTML(d.source_name)} (opens new tab)">${escapeHTML(trunc(d.source_name, 22))}</a></td>
+        <td class="${isOverview ? 'col-source' : ''}"><a href="${escapeHTML(d.source_url)}" target="_blank" rel="noopener noreferrer" class="source-link" aria-label="Source: ${escapeHTML(d.source_name)} (opens new tab)">${escapeHTML(trunc(d.source_name, 22))}</a></td>
       </tr>`;
     }).join('');
 
     safeHTML(tbody, html);
 
     tbody.querySelectorAll('tr[data-id]').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', e => {
+        // DOMPurify strips inline onclick handlers, so the source link's
+        // click must be excluded here rather than via stopPropagation.
+        if (e.target.closest('a')) return;
         EnergyState._lastFocusedRow = row;
         openDrawer(row.dataset.id);
       });
@@ -858,17 +870,24 @@
     updateSummerBanner();
   }
 
+  // Called from filters.init every time the filter bar DOM is (re)rendered —
+  // on first activation and on every switch back from another mode. The DOM
+  // is fresh each time, so listeners never stack.
   function initFilters() {
     const map = { 'filter-airline': 'airline', 'filter-region': 'region', 'filter-country': 'country', 'filter-impact': 'impactType', 'filter-severity': 'severity' };
     Object.keys(map).forEach(id => {
-      document.getElementById(id).addEventListener('change', e => {
+      const el = document.getElementById(id);
+      el.value = EnergyState.filters[map[id]] || '';
+      el.addEventListener('change', e => {
         EnergyState.filters[map[id]] = e.target.value;
         applyAndRender();
       });
     });
 
     let searchTimer;
-    document.getElementById('filter-search').addEventListener('input', e => {
+    const search = document.getElementById('filter-search');
+    search.value = EnergyState.filters.search || '';
+    search.addEventListener('input', e => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => { EnergyState.filters.search = e.target.value; applyAndRender(); }, 200);
     });
@@ -879,6 +898,12 @@
       document.getElementById('filter-search').value = '';
       applyAndRender();
     });
+  }
+
+  function initFilterBar() {
+    populateFilterOptions();
+    initFilters();
+    initSummerToggle();
   }
 
   function initTableSort() {
@@ -920,13 +945,8 @@
     const toggle = document.getElementById('summer-toggle');
     const closeBtn = document.getElementById('summer-banner-close');
 
-    // Auto-activate Jun-Aug
-    const month = new Date().getMonth();
-    if (month >= 5 && month <= 7) {
-      EnergyState.summerMode = true;
-      toggle.classList.add('active');
-      toggle.setAttribute('aria-pressed', 'true');
-    }
+    toggle.classList.toggle('active', EnergyState.summerMode);
+    toggle.setAttribute('aria-pressed', String(EnergyState.summerMode));
 
     toggle.addEventListener('click', () => {
       EnergyState.summerMode = !EnergyState.summerMode;
@@ -992,13 +1012,6 @@
     const g = parseInt(h.slice(l, l * 2).padStart(2, h[l]), 16);
     const b = parseInt(h.slice(l * 2).padStart(2, h[l * 2]), 16);
     return `rgba(${r},${g},${b},${a})`;
-  }
-  function updateTimestamp() {
-    const now = new Date();
-    const s = document.getElementById('header-ts-short');
-    const f = document.getElementById('header-ts-full');
-    if (s) s.textContent = 'Updated ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    if (f) f.textContent = now.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
   }
 
   /* ================================================================
@@ -1071,23 +1084,13 @@
      MODE INIT
      ================================================================ */
 
-  async function init() {
-    // Drawer keyboard / focus-trap event listeners (energy-specific)
-    document.addEventListener('keydown', e => {
-      const drawer = document.getElementById('detail-drawer');
-      if (!drawer.classList.contains('open')) return;
-      if (e.key === 'Escape') { closeDrawer(); return; }
-      if (e.key === 'Tab') {
-        const focusable = [...drawer.querySelectorAll('button,[href],input,select,[tabindex]:not([tabindex="-1"])')];
-        const first = focusable[0], last = focusable[focusable.length - 1];
-        if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
-        else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }
-      }
-    });
+  let _staticWired = false;
 
-    document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
-    document.getElementById('drawer-close').addEventListener('click', closeDrawer);
-    document.getElementById('retry-btn').addEventListener('click', init);
+  async function init() {
+    if (!_staticWired) {
+      _staticWired = true;
+      wireStaticListeners();
+    }
 
     showLoading();
 
@@ -1106,18 +1109,33 @@
       EnergyState.gasPrices   = gasPrices;
 
       populateFilterOptions();
-      initSummerToggle();
-      initFilters();
       initTableSort();
       showDashboard();
       renderFuelChart();
       applyAndRender();
-      updateTimestamp();
-      setInterval(updateTimestamp, 60000);
     } catch (err) {
       console.error('Energy mode init error:', err);
       showError(err.message || 'Failed to load dashboard data. Please retry.');
     }
+  }
+
+  function wireStaticListeners() {
+    // Drawer keyboard / focus-trap event listeners (energy-specific)
+    document.addEventListener('keydown', e => {
+      const drawer = document.getElementById('detail-drawer');
+      if (!drawer.classList.contains('open')) return;
+      if (e.key === 'Escape') { closeDrawer(); return; }
+      if (e.key === 'Tab') {
+        const focusable = [...drawer.querySelectorAll('button,[href],input,select,[tabindex]:not([tabindex="-1"])')];
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+        else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }
+      }
+    });
+
+    document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
+    document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+    document.getElementById('retry-btn').addEventListener('click', init);
   }
 
   /* ================================================================
@@ -1163,6 +1181,7 @@
     ],
     filters: {
       html: filtersHTML,
+      init: initFilterBar,
     },
     init: init,
     onThemeChange: onThemeChange,
